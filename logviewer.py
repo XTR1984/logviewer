@@ -804,6 +804,7 @@ class LogAnalyzerGUI:
         self.root.bind('<Control-d>', lambda e: self.clear_data())
 
     def update_relayinfo(self):
+        self.relayinfo = {}
         relaysfile = 'relays.txt'
         if os.path.exists(relaysfile):
             self.relayinfo = load_relayinfo(relaysfile)
@@ -1181,11 +1182,6 @@ class ConnectionDialog:
 
 # Запуск приложения
 if __name__ == "__main__":
-    # Проверяем существование порта
-    if not os.path.exists('/dev/ttyUSB0'):
-        print("Внимание: порт /dev/ttyUSB0 не найден!")
-        print("Попробуйте изменить порт в коде или подключить устройство.")
-
     app = LogAnalyzerGUI()
     if hasattr(app, 'connection_established') and app.connection_established:
         app.run()
