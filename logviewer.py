@@ -231,8 +231,8 @@ class LogParser:
         packet_id = id_match.group(1) if id_match else None
 
         #fix id
-        if packet_id !=None and len(packet_id)==7:
-            packet_id = '0'+packet_id
+        if packet_id !=None :
+            packet_id = packet_id.zfill(8)
 
         # Ищем отправителя
         from_match = re.search(r'fr=0x([0-9a-fA-F]+)', line)
