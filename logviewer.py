@@ -230,6 +230,10 @@ class LogParser:
         id_match = re.search(r'id=0x([0-9a-fA-F]+)', line)
         packet_id = id_match.group(1) if id_match else None
 
+        #fix id
+        if packet_id !=None and len(packet_id)==7:
+            packet_id = '0'+packet_id
+
         # Ищем отправителя
         from_match = re.search(r'fr=0x([0-9a-fA-F]+)', line)
         from_node = from_match.group(1).upper()[4:] if from_match else None
@@ -307,9 +311,9 @@ class LogParser:
         elif 'Started Tx' in line:
             event_type = 'RETRANSMISSION'
         elif 'Lora RX' in line and 'Ignore dupe' not in line:
-            event_type = 'RX_NEW'
+            event_type = 'RX'
         elif 'Ignore dupe incoming msg' in line:
-            event_type = 'RX_DUPLICATE'
+            event_type = 'IGNORE_DUPLICATE'
         elif 'enqueue for send' in line:
             event_type = 'QUEUED'
         elif 'Completed sending' in line:
@@ -322,7 +326,7 @@ class LogParser:
         elif 'Forwarding to phone' in line:
             event_type = 'TO_PHONE'
         elif "handleReceived" in line:
-            event_type = 'HANDLERECEIVED'
+            event_type = 'HANDLE_RECEIVED'
         elif 'Received DeviceTelemetry' in line:
             event_type = 'TELEMETRY'
         elif 'Received position' in line:
