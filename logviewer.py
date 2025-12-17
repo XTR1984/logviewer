@@ -392,7 +392,7 @@ class LogParser:
                 self.packet_stats[packet_id]['received_times'].append(timestamp)
             elif event_type == 'RETRANSMISSION':
                 self.packet_stats[packet_id]['retransmission_time'] = timestamp
-            elif event_type == 'RX_DUPLICATE':
+            elif event_type == 'IGNORE_DUPLICATE':
                 self.packet_stats[packet_id]['duplicate_count'] += 1
             
 
@@ -411,7 +411,7 @@ class LogParser:
         retransmission_time = None
 
         #for event in events:
-        #    if event['event_type'] in ['RECEIVED_TEXT', 'RX_NEW', 'WEBSERVER']:
+        #    if event['event_type'] in ['RECEIVED_TEXT', 'RX', 'WEBSERVER']:
         if len(events)>0:
             first_rx = events[0]['timestamp']
         #        break
@@ -1055,7 +1055,7 @@ class LogAnalyzerGUI:
             if event['relay_node']:
                 details += f"  Ретранслятор: {relay}, HopLim: {event['hop_lim']}\n"
             if event['rx_snr'] is not None:
-                if event_type == "RX_NEW":
+                if event_type == "RX":
                     details += f"  SNR: {event['rx_snr']}, RSSI: {event['rx_rssi']}\n"
             if self.rawline.get():
                 details += f"raw: { event['raw_line']}\n"
