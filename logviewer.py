@@ -267,13 +267,29 @@ class LogParser:
             except ValueError as e:
                 relay_node = None
 
-        # Поиск HopLim
+        # Поиск Hops
+        hop_lim = None 
+        hop_start = None
+        hops = None
         hop_match = re.search(r'HopLim=(\d+)', line)
         if hop_match:
             try:
                 hop_lim = int(hop_match.group(1))
             except ValueError as e:
                 hop_lim = None
+
+
+        # Поиск HopStart
+        hop_match = re.search(r'hopStart=(\d+)', line)
+        if hop_match:
+            try:
+                hop_start = int(hop_match.group(1))
+            except ValueError as e:
+                hop_start = None
+
+        hops = None
+        if hop_start!=None and hop_lim !=None:
+            hops = hop_start - hop_lim
 
         # Поиск SNR и RSSI
         snr_match = re.search(r'rxSNR=([-\d.]+)', line)
@@ -357,6 +373,8 @@ class LogParser:
             'event_type': event_type,
             'relay_node': relay_node,
             'hop_lim': hop_lim,
+            'hop_start': hop_start,
+            'hops': hops,
             'rx_snr': rx_snr,
             'rx_rssi': rx_rssi,
             'raw_line': line
@@ -1047,13 +1065,14 @@ class LogAnalyzerGUI:
             timestamp = event['timestamp']
             event_type = event['event_type']
             from_node = f"0x{event['from_node']}" if event['from_node'] else 'N/A'
-            relay = f"0x{event['relay_node']}" if event['relay_node'] else 'N/A'
+            relay = f"0x{event['relay_node']} " if event['relay_node'] else 'N/A'
+            relay += self.relayinfo.get( event['relay_node'],"" )
             msg = event['message'] or 'N/A'
 
             details += f"{timestamp} - {event_type}\n" 
             details += f"  От: {from_node}, Сообщение: {msg}\n"
             if event['relay_node']:
-                details += f"  Ретранслятор: {relay}, HopLim: {event['hop_lim']}\n"
+                details += f"  Ретранслятор: {relay}, hopLim: {event['hop_lim']} hopStart: {event['hop_start']} Hops: {event['hops']}\n"
             if event['rx_snr'] is not None:
                 if event_type == "RX":
                     details += f"  SNR: {event['rx_snr']}, RSSI: {event['rx_rssi']}\n"
