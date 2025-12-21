@@ -509,6 +509,7 @@ class LogAnalyzerGUI:
                 json.dump(self.nodeinfo, f, ensure_ascii=False, indent=2) 
 
             print(f"Загружено узлов: {str(len(self.nodeinfo))}")
+            iface.close()
 
     def show_connection_dialog(self):
         """Показывает диалог выбора источника данных"""
