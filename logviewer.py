@@ -1076,8 +1076,10 @@ class LogAnalyzerGUI:
             if event['rx_snr'] is not None:
                 if event_type == "RX":
                     details += f"  SNR: {event['rx_snr']}, RSSI: {event['rx_rssi']}\n"
+            if event['event_type']=='RETRANSMISSION':
+                details += f'  hopLim: {event["hop_lim"]}'                    
             if self.rawline.get():
-                details += f"raw: { event['raw_line']}\n"
+                details += f"  raw: { event['raw_line']}\n"
             details += "\n"
             
 
