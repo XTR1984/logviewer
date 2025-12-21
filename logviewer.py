@@ -724,6 +724,8 @@ class LogAnalyzerGUI:
         """Возвращает отображаемое имя узла в зависимости от режима"""
         if mode is None:
             mode = self.display_mode.get()
+        if node_id==None:
+            return "N/A"    
         node_id = "!"+node_id               
         # Авторежим: если есть файл nodes.txt - по имени, иначе по ID
         if mode == "auto":
