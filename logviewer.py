@@ -1,17 +1,16 @@
+import os
+import json
+import glob
 import serial
 import re
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox,Menu
+from tkinter import ttk, scrolledtext, messagebox,Menu, filedialog
 import threading
 import queue
 import time
 from datetime import datetime, timezone
 from collections import defaultdict
-import json
-import os
-import glob
-#import serial.tools.list_ports
-from tkinter import filedialog
+from meshtastic.serial_interface import SerialInterface
 
 
 def convert_with_local_offset(timestamp):
@@ -30,56 +29,6 @@ def convert_with_local_offset(timestamp):
     out_timestamp= local_date.strftime("%H:%M:%S")
     
     return out_timestamp
-
-
-def extract_data_from_file(filename):
-    """
-    Извлекает данные из файла с таблицей и возвращает словарь
-    Ключ: ID (без !)
-    Значение: словарь с полями 'user', 'aka', 'id_raw' (исходный ID с !)
-    """
-    result_dict = {}
-    
-    try:
-        with open(filename, 'r', encoding='utf-8') as file:
-            lines = file.readlines()
-            
-        for line in lines:
-            # Ищем строки с данными (начинаются с │ и содержат номер)
-            if line.startswith('│') and re.match(r'│\s*\d+\s*│', line):
-                # Разбиваем строку по символам │ и удаляем пустые элементы
-                parts = [part.strip() for part in line.split('│') if part.strip()]
-                
-                # Проверяем, что строка содержит достаточно данных
-                if len(parts) >= 4:
-                    try:
-                        # Извлекаем данные
-                        user = parts[1]
-                        id_raw = parts[2]  # ID с !
-                        aka = parts[3]
-                        
-                        # Очищаем ID от символа !
-                        user_id = id_raw.replace('!', '').upper()
-                        
-                        # Добавляем в словарь
-                        result_dict[user_id[4:]] = {
-                            'user': user,
-                            'aka': aka,
-                            'id_raw': id_raw  # сохраняем исходный ID
-                        }
-                    except (IndexError, ValueError) as e:
-                        print(f"Ошибка обработки строки: {line[:50]}...")
-                        continue
-                        
-    except FileNotFoundError:
-        print(f"Файл '{filename}' не найден.")
-        return {}
-    except Exception as e:
-        print(f"Ошибка при чтении файла: {e}")
-        return {}
-    
-    return result_dict
-
 
 def load_relayinfo(filename):
     relayinfo = {}
@@ -236,11 +185,11 @@ class LogParser:
 
         # Ищем отправителя
         from_match = re.search(r'fr=0x([0-9a-fA-F]+)', line)
-        from_node = from_match.group(1).upper()[4:] if from_match else None
+        from_node = from_match.group(1) if from_match else None
 
         # Ищем получателя
         to_match = re.search(r'to=0x([0-9a-fA-F]+)', line)
-        to_node = to_match.group(1).upper()[4:] if to_match else None
+        to_node = to_match.group(1) if to_match else None
 
         # Ищем сообщение
         msg_match = re.search(r'msg=(\d+)', line)
@@ -350,7 +299,7 @@ class LogParser:
         elif 'Routing sniffing' in line:
             event_type = 'ROUTING_SNIFFING'            
         elif 'cancelSending' in line:
-            event_type = 'CANSEL_SENDING'
+            event_type = 'CANCEL_SENDING'
             
 
         # Добавляем информацию о узлах
@@ -523,12 +472,13 @@ class LogAnalyzerGUI:
         self.time_correction = tk.BooleanVar(value=True)
         self.display_mode = tk.StringVar(value="auto") 
 
-        nodesfile = 'nodes.txt'
+
+        nodesfile = 'nodeinfo.json'
         if os.path.exists(nodesfile):
-            self.nodeinfo = extract_data_from_file(nodesfile)
+            with open(nodesfile, 'r', encoding='utf-8') as f:
+                self.nodeinfo = json.load(f)
         else:
             self.nodeinfo = {}
-            
 
 
         self.update_relayinfo()
@@ -551,8 +501,14 @@ class LogAnalyzerGUI:
         # Запуск обновления GUI
         self.update_gui()
 
+    def update_nodeinfo(self):
+        iface = SerialInterface(devPath=self.selected_port)
+        if iface.nodes:
+            self.nodeinfo = iface.nodes.copy()
+            with open('nodeinfo.json', 'w', encoding='utf-8') as f:
+                json.dump(self.nodeinfo, f, ensure_ascii=False, indent=2) 
 
-
+            print(f"Загружено узлов: {str(len(self.nodeinfo))}")
 
     def show_connection_dialog(self):
         """Показывает диалог выбора источника данных"""
@@ -564,11 +520,14 @@ class LogAnalyzerGUI:
             return False
             
         self.connection_type, self.connection_param = result
-
-        
         
         if self.connection_type == 'serial':
             # Создаем SerialReader с выбранным портом
+            self.selected_port = self.connection_param
+            answer = messagebox.askyesno("Nodeinfo", "Обновить Nodeinfo?")
+            if answer:
+                print('Загружаем информацию об узлах')
+                self.update_nodeinfo()
             self.serial_reader = SerialReader(port=self.connection_param)
             if not self.start_serial_reading():
                 self.show_connection_dialog()
@@ -682,19 +641,20 @@ class LogAnalyzerGUI:
                                    variable=self.display_mode, 
                                    value="auto",
                                    command=self.update_display_mode)
-        display_menu.add_radiobutton(label="По имени", 
+        display_menu.add_radiobutton(label="Длинное имя", 
                                    variable=self.display_mode, 
-                                   value="name",
+                                   value="longname",
                                    command=self.update_display_mode)
-        display_menu.add_radiobutton(label="По ID", 
+        display_menu.add_radiobutton(label="Короткое имя", 
+                                   variable=self.display_mode, 
+                                   value="shortname",
+                                   command=self.update_display_mode)
+        display_menu.add_radiobutton(label="ID", 
                                    variable=self.display_mode, 
                                    value="id",
                                    command=self.update_display_mode)
-        display_menu.add_radiobutton(label="По AKA", 
-                                   variable=self.display_mode, 
-                                   value="aka",
-                                   command=self.update_display_mode)
-        
+
+
         view_menu.add_checkbutton(label="Автопрокрутка", 
                                 variable=self.autoscroll, 
                                 command=self.toggle_auto_scroll)
@@ -717,6 +677,7 @@ class LogAnalyzerGUI:
         tools_menu.add_command(label="Обновить статистику", 
                              command=self.update_statistics, 
                              accelerator="F5")
+
         tools_menu.add_command(label="Перезагрузить relayinfo", 
                              command=self.update_relayinfo)
         tools_menu.add_separator()
@@ -762,27 +723,26 @@ class LogAnalyzerGUI:
         """Возвращает отображаемое имя узла в зависимости от режима"""
         if mode is None:
             mode = self.display_mode.get()
-        
+        node_id = "!"+node_id               
         # Авторежим: если есть файл nodes.txt - по имени, иначе по ID
         if mode == "auto":
             if not self.nodeinfo or node_id not in self.nodeinfo:
-                return node_id
-            return self.nodeinfo[node_id]["user"]
-        
-        elif mode == "name":
+                return node_id[5:]
+            return self.nodeinfo[node_id]["user"]["longName"]
+        elif mode == "longname":
             if node_id in self.nodeinfo:
-                return self.nodeinfo[node_id]["user"]
-            return node_id
-        
+                return self.nodeinfo[node_id]["user"]["longName"]
+            return node_id[5:]
+
         elif mode == "id":
-            return node_id
-        
-        elif mode == "aka":
+            return node_id[5:]
+
+        elif mode == "shortname":
             if node_id in self.nodeinfo:
-                return self.nodeinfo[node_id]["aka"]
-            return node_id
+                return self.nodeinfo[node_id]["user"]["shortName"]
+            return node_id[5:]
         
-        return node_id
+        return node_id[5:]
 
     def create_menu_old(self):
         """Создает меню приложения"""
@@ -868,7 +828,7 @@ class LogAnalyzerGUI:
 
     def show_about(self):
         """Показывает окно 'О программе'"""
-        about_text = """Meshtastic Node Log Analyzer v1.0
+        about_text = """Meshtastic Node Log Analyzer v1.1
         """
         messagebox.showinfo("О программе", about_text)
 

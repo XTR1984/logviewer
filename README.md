@@ -11,11 +11,7 @@ pip3 install -r requirements.txt
 python3 logviewer.py
 ```
 
-Для отображения имён нод нужен файлик nodes.txt с таблицей нод. \
-Пока что он рождается с помощью mestastic-cli (https://meshtastic.org/docs/software/python/cli/installation/):
-```bash
-    meshtastic --nodes > nodes.txt
-```
+Имена узлов подгружаются при запросе после выбора последовательного порта
 
 
 Для отображения релеев(от кого прилетел пакет) в именованом виде - формируем файлик relays.txt по формату
