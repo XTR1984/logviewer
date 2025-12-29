@@ -352,7 +352,7 @@ class LogParser:
 
             self.packet_stats[packet_id]['last_seen'] = timestamp
             self.packet_stats[packet_id]['events'].append(event)
-            if relay_node != None:
+            if relay_node != None and event_type=="RX":
                 self.packet_stats[packet_id]['relays'].append(relay_node)
 
             if event_type == 'RECEIVED_TEXT':
