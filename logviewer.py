@@ -307,7 +307,7 @@ class LogParser:
             self.nodes.add(from_node)
 
         if self.filter_webserver:
-            if '[WebServer]' in line:
+            if '[WebServer]' in line or '[ServerAPI]' in line:
                 return None
 
         # Создаем запись о событии
