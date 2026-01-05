@@ -1105,14 +1105,14 @@ class LogAnalyzerGUI:
                 if event['rx_snr'] is not None:
                     details += f"  SNR: {event['rx_snr']}, RSSI: {event['rx_rssi']}\n"
                 details += f"  hopLim: {event['hop_lim']} hopStart: {event['hop_start']}          Hops: {event['hops']}\n"
-                details += f"  Len: {event['len']}"
+                details += f"  Len: {event['len']}\n"
 
             if event['relay_node']:
                 details += f"  Ретранслятор: {relay}\n"
             if event['event_type']=='RETRANSMISSION':
                 details += f"  От: {from_node} Кому: {to_node}\n"   #Сообщение: {msg}
                 details += f"  hopLim: {event['hop_lim']} hopStart: {event['hop_start']}          Hops: {event['hops']}\n"
-                details += f"  Len: {event['len']}"
+                details += f"  Len: {event['len']}\n"
 
             if event['event_type']=='TRACEROUTE':
                 if 'route' in event:
