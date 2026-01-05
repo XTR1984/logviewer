@@ -126,7 +126,8 @@ class SerialReader:
                         if line:
                             self.data_queue.put(line)
                             if self.to_file:
-                                f = open("raw.log", "a")
+                                todaylogname = f"logs/{datetime.now().strftime('%Y%m%d')}.log"
+                                f = open(todaylogname, "a")
                                 f.write(line+"\r\n")
                                 f.close()
             except Exception as e:
@@ -700,7 +701,7 @@ class LogAnalyzerGUI:
                         variable=self.time_correction,
                         command=self.toggle_time_correction)
         
-        view_menu.add_checkbutton(label="Писать лог в файл raw.log",
+        view_menu.add_checkbutton(label="Писать логи в каталог logs",
                                   variable= self.writelog,
                                   command= self.toggle_writelog
                                   )
@@ -1249,6 +1250,9 @@ class ConnectionDialog:
 
 # Запуск приложения
 if __name__ == "__main__":
+    if not os.path.exists('logs'):
+       os.makedirs('logs')
+
     app = LogAnalyzerGUI()
     if hasattr(app, 'connection_established') and app.connection_established:
         app.run()
