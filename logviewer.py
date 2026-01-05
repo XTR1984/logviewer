@@ -66,7 +66,7 @@ class SerialReader:
         self.serial = None
         self.running = False
         self.data_queue = queue.Queue()
-        self.to_file = False
+        self.to_file = True
 
     @staticmethod
     def find_serial_ports():
@@ -125,7 +125,7 @@ class SerialReader:
                         line = line.strip()
                         if line:
                             self.data_queue.put(line)
-                            if (self.to_file):
+                            if self.to_file:
                                 f = open("raw.log", "a")
                                 f.write(line+"\r\n")
                                 f.close()
@@ -158,11 +158,20 @@ class LogParser:
         self.start_time = time.time()
         self.filter_webserver = True
         self.time_correction = True
+        self.last_traceroute_event = None
+        self.to_file= True
 
     def parse_line(self, line):
         """Парсит одну строку лога"""
         if not line.strip():
             return None
+
+        # захватим traceroute
+        if "-->" in line and self.last_traceroute_event!=None:
+            self.last_traceroute_event["route"] = line
+        if "<--" in line and self.last_traceroute_event!=None:
+            self.last_traceroute_event["route_back"] = line
+
 
         # Извлекаем временную метку
         time_match = re.search(r'(\d{2}:\d{2}:\d{2}\s+\d+)\s+\[', line)
@@ -187,6 +196,11 @@ class LogParser:
         from_match = re.search(r'fr=0x([0-9a-fA-F]+)', line)
         from_node = from_match.group(1) if from_match else None
 
+        if from_node==None:
+            from_match = re.search(r'from=0x([0-9a-fA-F]+)', line)
+            from_node = from_match.group(1) if from_match else None
+
+
         # Ищем получателя
         to_match = re.search(r'to=0x([0-9a-fA-F]+)', line)
         to_node = to_match.group(1) if to_match else None
@@ -198,6 +212,11 @@ class LogParser:
         # Ищем portnum
         port_match = re.search(r'Portnum=(\d+)', line)
         portnum = port_match.group(1) if port_match else None
+
+        # Ищем len
+        len_match = re.search(r'len=(\d+)', line)
+        payload_len = len_match.group(1) if len_match else None
+
 
         # Определяем тип события
         event_type = "OTHER"
@@ -296,11 +315,16 @@ class LogParser:
             event_type = 'TELEMETRY'
         elif 'Received position' in line:
             event_type = 'POSITION'
+        elif 'Received traceroute' in line:            
+            event_type = 'TRACEROUTE'            
         elif 'Routing sniffing' in line:
             event_type = 'ROUTING_SNIFFING'            
         elif 'cancelSending' in line:
             event_type = 'CANCEL_SENDING'
             
+
+            
+
 
         # Добавляем информацию о узлах
         if from_node:
@@ -326,10 +350,12 @@ class LogParser:
             'hops': hops,
             'rx_snr': rx_snr,
             'rx_rssi': rx_rssi,
+            'len': payload_len,  
             'raw_line': line
         }
 
 
+        
 
         # Сохраняем событие
         if packet_id:
@@ -361,7 +387,10 @@ class LogParser:
                 self.packet_stats[packet_id]['retransmission_time'] = timestamp
             elif event_type == 'IGNORE_DUPLICATE':
                 self.packet_stats[packet_id]['duplicate_count'] += 1
-            
+
+            if event_type=='TRACEROUTE': 
+                self.last_traceroute_event = event
+
 
         return event
 
@@ -470,6 +499,7 @@ class LogAnalyzerGUI:
         self.serial_running = False
         self.rawline = tk.BooleanVar(value=False)
         self.time_correction = tk.BooleanVar(value=True)
+        self.writelog = tk.BooleanVar(value=True)
         self.display_mode = tk.StringVar(value="auto") 
 
 
@@ -670,6 +700,10 @@ class LogAnalyzerGUI:
                         variable=self.time_correction,
                         command=self.toggle_time_correction)
         
+        view_menu.add_checkbutton(label="Писать лог в файл raw.log",
+                                  variable= self.writelog,
+                                  command= self.toggle_writelog
+                                  )
         view_menu.add_separator()
         
         # Меню Сервис
@@ -746,6 +780,33 @@ class LogAnalyzerGUI:
             return node_id[5:]
         
         return node_id[5:]
+    
+    def decrypt_route_string(self,route_str):
+        """
+        Расшифровывает строку маршрута, заменяя node_id на отображаемые имена.
+
+        Args:
+            route_str (str): Строка маршрута вида:
+                "route: 0xc5e6e008 --> 0xf592b40e (-14.75dB) --> 0xefd3e17f (-17.25dB) --> 0xa0cb4bd0 (-2.00dB)"
+
+        Returns:
+            str: Расшифрованная строка с именами устройств
+        """
+
+        def replace_node_id(match):
+            """Вспомогательная функция для замены node_id в re.sub"""
+            hex_str = match.group(1)  # Извлекаем hex без '0x'
+            node_id = hex_str.zfill(8)  # Добиваем нулями до 8 символов
+            display_name = self.get_display_name(node_id)
+            return display_name
+    
+        # Шаблон для поиска всех node_id в формате 0xXXXXXX
+        pattern = r'0x([a-fA-F0-9]+)'
+    
+        # Заменяем все вхождения node_id на отображаемые имена
+        result = re.sub(pattern, replace_node_id, route_str)
+
+        return result    
 
     def create_menu_old(self):
         """Создает меню приложения"""
@@ -809,6 +870,11 @@ class LogAnalyzerGUI:
 
     def toggle_time_correction(self):
         self.parser.time_correction = self.time_correction.get() 
+
+
+    def toggle_writelog(self):
+        if self.serial_reader:
+            self.serial_reader.to_file = self.writelog.get() 
 
 
     def toggle_rawline(self):
@@ -1028,19 +1094,32 @@ class LogAnalyzerGUI:
             timestamp = event['timestamp']
             event_type = event['event_type']
             from_node = f"0x{event['from_node']}" if event['from_node'] else 'N/A'
+            to_node = f"0x{event['to_node']}" if event['to_node'] else 'N/A'
             relay = f"0x{event['relay_node']} " if event['relay_node'] else 'N/A'
             relay += self.relayinfo.get( event['relay_node'],"" )
             msg = event['message'] or 'N/A'
 
             details += f"{timestamp} - {event_type}\n" 
-            details += f"  От: {from_node}, Сообщение: {msg}\n"
-            if event['relay_node']:
-                details += f"  Ретранслятор: {relay}, hopLim: {event['hop_lim']} hopStart: {event['hop_start']} Hops: {event['hops']}\n"
-            if event['rx_snr'] is not None:
-                if event_type == "RX":
+            if event_type == "RX":                
+                details += f"  От: {from_node} Кому: {to_node}\n"   #Сообщение: {msg}
+                if event['rx_snr'] is not None:
                     details += f"  SNR: {event['rx_snr']}, RSSI: {event['rx_rssi']}\n"
+                details += f"  hopLim: {event['hop_lim']} hopStart: {event['hop_start']}          Hops: {event['hops']}\n"
+                details += f"  Len: {event['len']}"
+
+            if event['relay_node']:
+                details += f"  Ретранслятор: {relay}\n"
             if event['event_type']=='RETRANSMISSION':
-                details += f'  hopLim: {event["hop_lim"]}'                    
+                details += f"  От: {from_node} Кому: {to_node}\n"   #Сообщение: {msg}
+                details += f"  hopLim: {event['hop_lim']} hopStart: {event['hop_start']}          Hops: {event['hops']}\n"
+                details += f"  Len: {event['len']}"
+
+            if event['event_type']=='TRACEROUTE':
+                if 'route' in event:
+                    details += f'  route: {self.decrypt_route_string(event["route"])}\n'
+                if 'route_back' in event:
+                    details += f'  route_back: {self.decrypt_route_string(event["route_back"])}\n'
+
             if self.rawline.get():
                 details += f"  raw: { event['raw_line']}\n"
             details += "\n"
