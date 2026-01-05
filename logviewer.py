@@ -500,7 +500,7 @@ class LogAnalyzerGUI:
         self.rawline = tk.BooleanVar(value=False)
         self.time_correction = tk.BooleanVar(value=True)
         self.writelog = tk.BooleanVar(value=True)
-        self.display_mode = tk.StringVar(value="auto") 
+        self.display_mode = tk.StringVar(value="combine") 
 
 
         nodesfile = 'nodeinfo.json'
@@ -668,9 +668,9 @@ class LogAnalyzerGUI:
         # Группа радио-кнопок для режима отображения
         display_menu = Menu(view_menu, tearoff=0)
         view_menu.add_cascade(label="Режим отображения узлов", menu=display_menu)
-        display_menu.add_radiobutton(label="Авто", 
+        display_menu.add_radiobutton(label="Комбинировано", 
                                    variable=self.display_mode, 
-                                   value="auto",
+                                   value="combine",
                                    command=self.update_display_mode)
         display_menu.add_radiobutton(label="Длинное имя", 
                                    variable=self.display_mode, 
@@ -762,10 +762,10 @@ class LogAnalyzerGUI:
             return "N/A"    
         node_id = "!"+node_id               
         # Авторежим: если есть файл nodes.txt - по имени, иначе по ID
-        if mode == "auto":
+        if mode ==  "combine":
             if not self.nodeinfo or node_id not in self.nodeinfo:
                 return node_id[5:]
-            return self.nodeinfo[node_id]["user"]["longName"]
+            return f'{self.nodeinfo[node_id]["user"]["longName"]} ({self.nodeinfo[node_id]["user"]["shortName"]})'
         elif mode == "longname":
             if node_id in self.nodeinfo:
                 return self.nodeinfo[node_id]["user"]["longName"]
