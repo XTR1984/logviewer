@@ -502,7 +502,7 @@ class LogAnalyzerGUI:
         self.time_correction = tk.BooleanVar(value=True)
         self.writelog = tk.BooleanVar(value=True)
         self.display_mode = tk.StringVar(value="combine") 
-
+        self.current_packet_details_id = None
 
         nodesfile = 'nodeinfo.json'
         if os.path.exists(nodesfile):
@@ -949,6 +949,12 @@ class LogAnalyzerGUI:
         # Текстовая область для деталей
         self.details_text = scrolledtext.ScrolledText(details_frame, height=15)
         self.details_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.details_text.bind("<Button-3>", self.details_show_menu)
+
+        self.details_context_menu = tk.Menu(details_frame, tearoff=0)
+        self.details_context_menu.add_command(label="Обновить", command=self.details_update)
+        self.details_context_menu.add_command(label="Копировать", command=self.details_copy_text)
+        
 
         # Конфигурация расширения
         details_frame.columnconfigure(0, weight=1)
@@ -956,6 +962,23 @@ class LogAnalyzerGUI:
 
         # Привязка события выбора в таблице
         self.tree.bind('<<TreeviewSelect>>', self.on_packet_select)
+
+    def details_show_menu(self,event):
+        self.details_context_menu.tk_popup(event.x_root, event.y_root)
+
+    def details_copy_text(self):
+        try:
+            selected = self.details_text.selection_get()
+            self.root.clipboard_clear()
+            self.root.clipboard_append(selected)
+        except:
+            pass
+
+    def details_update(self):
+        if self.current_packet_details_id!=None:
+            self.show_packet_details(self.current_packet_details_id)
+
+    
 
     def start_serial_reading(self):
         """Запускает чтение из последовательного порта"""
@@ -1022,7 +1045,7 @@ class LogAnalyzerGUI:
         packet_id_display= None
         item_id = None
         for summary in summaries:
-            delay_str = f"{summary['delay_seconds']:.2f}" if summary['delay_seconds']!=None else "N/A"
+            delay_str = f"{summary['delay_seconds']:.0f}" if summary['delay_seconds']!=None else "N/A"
             packet_id_display = f"0x{summary['packet_id']}"
 
             from_node = self.get_display_name(summary['from_node'])
@@ -1077,6 +1100,7 @@ class LogAnalyzerGUI:
         self.show_packet_details(packet_id)
 
     def show_packet_details(self, packet_id):
+        self.current_packet_details_id = packet_id
         """Показывает детали выбранного пакета"""
         events = self.parser.messages.get(packet_id, [])
 
