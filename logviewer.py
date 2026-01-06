@@ -114,6 +114,7 @@ class SerialReader:
         """Читает данные из последовательного порта"""
         buffer = ""
         while self.running:
+            time.sleep(0.1)
             try:
                 if self.serial.in_waiting > 0:
                     data = self.serial.read(self.serial.in_waiting).decode('utf-8', errors='ignore')
