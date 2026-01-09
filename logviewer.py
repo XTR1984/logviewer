@@ -288,14 +288,33 @@ class LogParser:
 
 
         # Определение типа события
-        if 'Received text msg' in line:
+        if 'SimRadio' in line:
+            if "Start low level send" in line:
+                event_type = 'SIMRADIO_SEND'            
+            elif "Decoded message" in line:
+                event_type = 'SIMRADIO_DECODED'            
+            elif "Completed sending" in line:
+                event_type = 'SIMRADIO_SEND_COMPLETE'            
+#            elif 'enqueuing for send' in line:
+#                event_type = "SIMRADIO_ENQUEUING"
+            elif 'decoded message' in line:
+                event_type = "SIMRADIO_DECODED"
+            elif 'SimRadio' in line:
+                event_type = 'SIMRADIO'            
+        elif 'enqueuing for send' in line:
+                event_type = "SIMRADIO_ENQUEUING"
+        elif 'Received text msg' in line:
             event_type = 'RECEIVED_TEXT'
         elif 'Received nodeinfo' in line:
             event_type = 'RECEIVED_NODEINFO'
         elif 'Received routing' in line:
             event_type = 'RECEIVED_ROUTING'
-        elif 'Started Tx' in line:
+        elif 'Received Admin' in line:
+            event_type = 'RECEIVED_ADMIN'                        
+        elif 'Sending retransmission' in line:
             event_type = 'RETRANSMISSION'
+        elif 'Started Tx' in line:
+            event_type = 'START_TX'
         elif 'Lora RX' in line and 'Ignore dupe' not in line:
             event_type = 'RX'
         elif 'Ignore dupe incoming msg' in line:
@@ -309,10 +328,18 @@ class LogParser:
             self.busy_rx_count += 1
         elif 'decoded message' in line:
             event_type = 'DECODED'
+        elif 'Send response' in line:
+            event_type = 'SEND_RESPONSE'
+        elif 'Enqueued local' in line:
+            event_type = 'ENQUEUED_LOCAL'
+        elif 'Rx someone rebroadcasting for us' in line:
+            event_type = 'SOMEONE_REBROADCASTING_FOR_US'            
         elif 'Forwarding to phone' in line:
             event_type = 'TO_PHONE'
-        elif "handleReceived" in line:
-            event_type = 'HANDLE_RECEIVED'
+        elif "handleReceived(LOCAL)" in line:
+            event_type = 'RECEIVED_LOCAL'
+        elif "handleReceived(REMOTE)" in line:
+            event_type = 'RECEIVED_REMOTE'
         elif 'Received DeviceTelemetry' in line:
             event_type = 'TELEMETRY'
         elif 'Received position' in line:
@@ -323,7 +350,13 @@ class LogParser:
             event_type = 'ROUTING_SNIFFING'            
         elif 'cancelSending' in line:
             event_type = 'CANCEL_SENDING'
-            
+        elif 'Reliable send failed' in line:
+            event_type = 'RELIABLE_SEND_FAILED'
+        
+
+
+
+
 
             
 
@@ -333,7 +366,7 @@ class LogParser:
             self.nodes.add(from_node)
 
         if self.filter_webserver:
-            if '[WebServer]' in line or '[ServerAPI]' in line:
+            if '[WebServer]' in line or ('[ServerAPI]' in line and not "Lora RX" in line):
                 return None
 
         # Создаем запись о событии
@@ -385,7 +418,7 @@ class LogParser:
 
             if event_type == 'RECEIVED_TEXT':
                 self.packet_stats[packet_id]['received_times'].append(timestamp)
-            elif event_type == 'RETRANSMISSION':
+            elif event_type == 'START_TX':
                 self.packet_stats[packet_id]['retransmission_time'] = timestamp
             elif event_type == 'IGNORE_DUPLICATE':
                 self.packet_stats[packet_id]['duplicate_count'] += 1
@@ -1135,7 +1168,7 @@ class LogAnalyzerGUI:
 
             if event['relay_node']:
                 details += f"  Ретранслятор: {relay}\n"
-            if event['event_type']=='RETRANSMISSION':
+            if event['event_type']=='START_TX':
                 details += f"  От: {from_node} Кому: {to_node}\n"   #Сообщение: {msg}
                 details += f"  hopLim: {event['hop_lim']} hopStart: {event['hop_start']}          Hops: {event['hops']}\n"
                 details += f"  Len: {event['len']}\n"
