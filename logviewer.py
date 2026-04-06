@@ -1059,6 +1059,8 @@ class LogAnalyzerGUI:
     def update_packets_table(self):
         """Обновляет таблицу пакетов"""
 
+        focus_on_tree = (self.root.focus_get() == self.tree)
+
         # Сохраняем ID текущего выделенного пакета
         current_selection = self.tree.selection()
         selected_packet_id = None
@@ -1110,15 +1112,20 @@ class LogAnalyzerGUI:
             self.tree.unbind('<<TreeviewSelect>>')
             self.tree.selection_set(item_to_select)
             self.root.after(10, lambda: self.tree.bind('<<TreeviewSelect>>', self.on_packet_select))
-            #self.tree.focus(item_to_select)
+            #
             #self.tree.see(item_to_select)    
+            if focus_on_tree:
+                self.tree.focus(item_to_select)                
+                #self.tree.focus_set()            
 
 
             # Автоскролл в конец
         if self.autoscroll.get():    
             if self.tree.get_children():
                 last_item = self.tree.get_children()[-1]
-                self.tree.see(last_item)    
+                self.tree.see(last_item)
+                   
+
 
     def on_packet_select(self, event):
         """Обрабатывает выбор пакета в таблице"""
