@@ -1059,8 +1059,11 @@ class LogAnalyzerGUI:
     def update_packets_table(self):
         """Обновляет таблицу пакетов"""
 
-        focus_on_tree = (self.root.focus_get() == self.tree)
-
+        focus_on_tree = False
+        try:
+            focus_on_tree = (self.root.focus_get() == self.tree)
+        except (Exception) as e:
+            pass
         # Сохраняем ID текущего выделенного пакета
         current_selection = self.tree.selection()
         selected_packet_id = None
