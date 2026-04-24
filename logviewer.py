@@ -59,6 +59,113 @@ def load_relayinfo(filename):
     return relayinfo
 
 
+import socket
+import select
+
+class UDPReceiver:
+    def __init__(self, port=1514):
+        self.port = port
+        self.sock = None
+        self.running = False
+        self.data_queue = queue.Queue()
+        self.to_file = True
+
+    def start(self):
+        """Запускает UDP сервер"""
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.sock.bind(('0.0.0.0', self.port))
+            self.sock.setblocking(False)
+            self.running = True
+            thread = threading.Thread(target=self._read_udp)
+            thread.daemon = True
+            thread.start()
+            return True
+        except Exception as e:
+            print(f"Ошибка открытия UDP порта {self.port}: {e}")
+            return False
+
+    def parse_syslog_line(self,line):
+        """
+        Парсит syslog строку и возвращает компоненты
+        Формат: <PRI>VERSION - HOSTNAME MODULE - - - [TIMESTAMP]: MESSAGE
+        """
+        result = {
+            'pri': None,
+            'severity': None,
+            'facility': None,
+            'hostname': None,
+            'module': None,
+            'timestamp': None,
+            'message': None
+        }
+        
+        
+        # Извлекаем компоненты: hostname, module, timestamp, message
+        # Формат: 1 - HOSTNAME MODULE - - - [TIMESTAMP]: MESSAGE
+        line = line.replace('\ufeff', '')
+        parts_match = re.search(r'^<(\d+)>1\s+-\s+(\S+)\s+(\w+)\s+-\s+-\s+-\s+\[(\d+)\]:\s*(.+)', line)
+
+        if parts_match:
+            pri = int(parts_match.group(1))
+            result['pri'] = pri
+            result['severity'] = pri & 0x07
+            result['facility'] = pri >> 3
+            result['hostname'] = parts_match.group(2)
+            result['module'] = parts_match.group(3)
+            result['timestamp'] = parts_match.group(4)
+            result['message'] = parts_match.group(5)
+        
+        return result
+
+    def _read_udp(self):
+        """Читает данные из UDP сокета"""
+        while self.running:
+            try:
+                ready = select.select([self.sock], [], [], 0.1)
+                if ready[0]:
+                    data, addr = self.sock.recvfrom(65535)
+                    try:
+                        decoded_data = data.decode('utf-8', errors='ignore')
+                        lines = decoded_data.split('\n')
+
+                        for line in lines:
+                            line = line.strip()
+                            if line:
+                                # Извлекаем сообщение и модуль
+                                parsed = self.parse_syslog_line(line)
+                                if parsed['message']:
+                                    time1 = datetime.now().strftime('%H:%M:%S')
+                                    timestamp = parsed['timestamp']
+                                    # Можно добавить модуль в начало сообщения для контекста
+                                    converted_line = f"{time1} {timestamp} [{parsed['module']}] {parsed['message']}"
+                                    self.data_queue.put(converted_line)
+                                    if self.to_file:
+                                        todaylogname = f"logs/{datetime.now().strftime('%Y%m%d')}.log"
+                                        with open(todaylogname, "a", encoding='utf-8') as f:
+                                            f.write(converted_line + "\r\n")
+                    except Exception as e:
+                        print(f"Ошибка декодирования UDP данных: {e}")
+            except Exception as e:
+                print(f"Ошибка чтения UDP: {e}")
+                time.sleep(0.1)
+
+    def get_data(self):
+        """Возвращает данные из очереди"""
+        data = []
+        while not self.data_queue.empty():
+            try:
+                data.append(self.data_queue.get_nowait())
+            except queue.Empty:
+                break
+        return data
+
+    def stop(self):
+        """Останавливает UDP сервер"""
+        self.running = False
+        if self.sock:
+            self.sock.close()
+
 class SerialReader:
     def __init__(self, port='/dev/ttyUSB0', baudrate=115200):
         self.port = port
@@ -187,7 +294,7 @@ class LogParser:
 
 
         # Ищем ID пакета
-        id_match = re.search(r'id=0x([0-9a-fA-F]+)', line)
+        id_match = re.search(r'\(id=0x([0-9a-fA-F]+)', line)
         packet_id = id_match.group(1) if id_match else None
 
         #fix id
@@ -597,7 +704,16 @@ class LogAnalyzerGUI:
             self.serial_reader = SerialReader(port=self.connection_param)
             if not self.start_serial_reading():
                 self.show_connection_dialog()
-            self.connection_established = True                
+            self.connection_established = True        
+        elif self.connection_type == 'udp':
+            # Создаем UDPReceiver с выбранным портом
+            self.selected_port = self.connection_param
+            self.udp_receiver = UDPReceiver(port=int(self.connection_param))
+            self.time_correction.set(False) 
+            self.parser.time_correction = False
+            if not self.start_udp_reading():
+                self.show_connection_dialog()
+            self.connection_established = True                    
         else:  # file
             # Загружаем данные из файла
             self.connection_established = True                
@@ -605,6 +721,17 @@ class LogAnalyzerGUI:
             self.update_statistics()
             
 
+    def start_udp_reading(self):
+        """Запускает чтение из UDP порта"""
+        if self.udp_receiver.start():
+            self.serial_running = True  # Переиспользуем флаг
+            self.serial_indicator.config(text="🟢 UDP:{}".format(self.selected_port))
+            self.update_status("UDP порт подключен")
+            return True
+        else:
+            self.serial_indicator.config(text="🔴 UDP ошибка")
+            self.update_status("Ошибка подключения к UDP порту")
+            return False
 
     def load_from_file(self, filename):
         """Загружает данные из файла лога"""
@@ -1031,7 +1158,13 @@ class LogAnalyzerGUI:
         """Обновляет GUI"""
         if self.serial_running:
             # Читаем новые данные
-            lines = self.serial_reader.get_data()
+            if hasattr(self, 'serial_reader') and self.serial_reader:
+                lines = self.serial_reader.get_data()
+            elif hasattr(self, 'udp_receiver') and self.udp_receiver:
+                lines = self.udp_receiver.get_data()
+            else:
+                lines = []
+
             for line in lines:
                 self.parser.parse_line(line)
 
@@ -1255,6 +1388,11 @@ class ConnectionDialog:
                   command=lambda: self.select_serial(dialog),
                   width=30).pack(pady=5)
         
+        # Кнопка UDP порта
+        ttk.Button(btn_frame, text="🌐 Подключиться к UDP порту 1514",
+                  command=lambda: self.select_udp(dialog),
+                  width=30).pack(pady=5)
+
         # Кнопка загрузки из файла
         ttk.Button(btn_frame, text="📁 Загрузить из файла лога",
                   command=lambda: self.select_file(dialog),
@@ -1267,7 +1405,35 @@ class ConnectionDialog:
         
         self.parent.wait_window(dialog)
         return self.result
-    
+
+    def select_udp(self, dialog):
+        # Диалог для ввода порта
+        port_dialog = tk.Toplevel(dialog)
+        port_dialog.title("UDP порт")
+        port_dialog.geometry("300x150")
+        port_dialog.grab_set()
+        
+        ttk.Label(port_dialog, text="Введите номер UDP порта:").pack(pady=10)
+        
+        port_var = tk.StringVar(value="1514")
+        port_entry = ttk.Entry(port_dialog, textvariable=port_var)
+        port_entry.pack(pady=5)
+        
+        def on_connect():
+            try:
+                port = int(port_var.get())
+                if 1 <= port <= 65535:
+                    self.result = ('udp', str(port))
+                    port_dialog.destroy()
+                    dialog.destroy()
+                else:
+                    messagebox.showerror("Ошибка", "Порт должен быть от 1 до 65535")
+            except ValueError:
+                messagebox.showerror("Ошибка", "Введите корректный номер порта")
+        
+        ttk.Button(port_dialog, text="Подключиться", command=on_connect).pack(pady=10)
+        port_entry.bind('<Return>', lambda e: on_connect())
+
     def select_serial(self, dialog):
         ports = SerialReader.find_serial_ports()
         
