@@ -288,6 +288,10 @@ class LogParser:
             self.errors_count+=1
             return
 
+        # ignore Neighbor
+        if "Neighbor" and 'node_id' in line:
+            return
+
         # Извлекаем временную метку
         time_match = re.search(r'(\d{2}:\d{2}:\d{2}\s+\d+)\s+\[', line)
         if not time_match:
