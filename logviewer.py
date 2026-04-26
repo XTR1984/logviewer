@@ -488,6 +488,7 @@ class LogParser:
             if '[WebServer]' in line or ('[ServerAPI]' in line and not "Lora RX" in line):
                 return None
 
+
         # Создаем запись о событии
         event = {
             'timestamp': timestamp,
@@ -511,7 +512,7 @@ class LogParser:
 
         
 
-        # Сохраняем событие
+        # Сохраняем пакет
         if packet_id:
             self.messages[packet_id].append(event)
 
@@ -520,6 +521,7 @@ class LogParser:
                 self.packet_stats[packet_id] = {
                     'first_seen': timestamp,
                     'last_seen': timestamp,
+                    'packet_type': None,
                     'received_times': [],
                     'retransmission_time': None,
                     'message': message,
@@ -529,6 +531,27 @@ class LogParser:
                     'relays': [],
                     'events': []
                 }
+
+            if self.packet_stats[packet_id]['packet_type']==None and portnum:
+                packet_type = None
+                portnum = int(portnum)
+                if portnum==1:
+                    packet_type = "Message"
+                elif portnum==4:
+                    packet_type = "NodeInfo"
+                elif portnum==3: 
+                    packet_type = "Position"
+                elif portnum==70:
+                    packet_type = "Traceroute"
+                elif portnum==71:
+                    packet_type = "Neighbors"
+                elif portnum==67: 
+                    packet_type = "Telemetry"
+                else:
+                    packet_type = portnum
+                self.packet_stats[packet_id]['packet_type'] = packet_type
+
+
 
             self.packet_stats[packet_id]['last_seen'] = timestamp
             self.packet_stats[packet_id]['events'].append(event)
@@ -590,6 +613,7 @@ class LogParser:
             'message': stats.get('message', 'N/A'),
             'from_node': stats.get('from_node', 'N/A'),
             'to_node': stats.get('to_node', 'N/A'),
+            'packet_type': stats.get('packet_type', 'N/A'),
             'first_received': first_rx,
             'retransmission_time': retransmission_time,
             'delay_seconds': delay,
@@ -1099,11 +1123,11 @@ class LogAnalyzerGUI:
         packets_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
 
         # Создание Treeview
-        columns = ('ID', 'От', 'Кому', 'Первый', 'Ретрансляция', 'Задержка(с)', 'Дубли', 'relays', 'Событий')
+        columns = ('ID', 'От', 'Кому', 'Тип','Первый', 'Ретрансляция', 'Задержка(с)', 'Дубли', 'relays', 'Событий')
         self.tree = ttk.Treeview(packets_frame, columns=columns, show='headings', height=15)
 
         # Настройка колонок
-        col_widths = [40, 80, 80, 60, 60, 60, 80, 80, 40]
+        col_widths = [40, 80, 80, 60, 40, 60, 60, 80, 80, 40]
         for col, width in zip(columns, col_widths):
             self.tree.heading(col, text=col)
             self.tree.column(col, width=width, anchor=tk.CENTER)
@@ -1243,12 +1267,14 @@ class LogAnalyzerGUI:
 
             rs = summary['relays']
             relays = [self.relayinfo.get(x, x) for x in rs]
+            packet_type = summary['packet_type']
 
             item_id = self.tree.insert('', 'end', values=(
                 packet_id_display,
                 #summary['message'],
                 from_node,
                 to_node,
+                packet_type,
                 summary['first_received'] or 'N/A',
                 summary['retransmission_time'] or 'N/A',
                 delay_str,
