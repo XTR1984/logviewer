@@ -295,7 +295,7 @@ class LogParser:
 
 
         # Ищем ID пакета
-        id_match = re.search(r'\(id=0x([0-9a-fA-F]+)', line)
+        id_match = re.search(r'id=0x([0-9a-fA-F]+)', line)
         packet_id = id_match.group(1) if id_match else None
 
         #fix id
