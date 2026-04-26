@@ -263,6 +263,7 @@ class LogParser:
         self.messages = defaultdict(list)  # Все события по ID пакета
         self.packet_stats = {}  # Статистика по пакетам
         self.busy_rx_count = 0
+        self.rx_count = 0
         self.nodes = set()
         self.start_time = time.time()
         self.filter_webserver = True
@@ -422,8 +423,10 @@ class LogParser:
             event_type = 'RETRANSMISSION'
         elif 'Started Tx' in line:
             event_type = 'START_TX'
-        elif 'Lora RX' in line and 'Ignore dupe' not in line:
-            event_type = 'RX'
+        elif 'Lora RX' in line:
+            if 'Ignore dupe' not in line:
+                event_type = 'RX'
+            self.rx_count +=1
         elif 'Ignore dupe incoming msg' in line:
             event_type = 'IGNORE_DUPLICATE'
         elif 'enqueue for send' in line:
@@ -620,6 +623,7 @@ class LogParser:
             'retransmitted_packets': retransmitted,
             'unique_nodes': len(self.nodes),
             'busy_rx_count': self.busy_rx_count,
+            'rx_count': self.rx_count,
             'avg_retransmission_delay': avg_delay,
             'uptime_seconds': time.time() - self.start_time
         }
@@ -776,6 +780,7 @@ class LogAnalyzerGUI:
         self.stats_labels = {}
         stats_items = [
             ('packets', '📦 Пакеты: 0'),
+            ('rx_count', '📦 Принято: 0'),
             ('retrans', '🔄 Ретранс: 0'),
             ('nodes', '📡 Узлы: 0'),
             ('busy', '⚠️ BusyRx: 0'),
@@ -1180,6 +1185,7 @@ class LogAnalyzerGUI:
         
         # Обновляем метки в статус баре
         self.stats_labels['packets'].config(text=f"📦 Пакеты: {stats['total_packets']}")
+        self.stats_labels['rx_count'].config(text=f"📦 Принято: {stats['rx_count']}")
         self.stats_labels['retrans'].config(text=f"🔄 Ретранс: {stats['retransmitted_packets']}")
         self.stats_labels['nodes'].config(text=f"📡 Узлы: {stats['unique_nodes']}")
         self.stats_labels['busy'].config(text=f"⚠️ BusyRx: {stats['busy_rx_count']}")
