@@ -264,6 +264,7 @@ class LogParser:
         self.packet_stats = {}  # Статистика по пакетам
         self.busy_rx_count = 0
         self.rx_count = 0
+        self.errors_count = 0
         self.nodes = set()
         self.start_time = time.time()
         self.filter_webserver = True
@@ -282,6 +283,10 @@ class LogParser:
         if "<--" in line and self.last_traceroute_event!=None:
             self.last_traceroute_event["route_back"] = line
 
+        # error
+        if "Ignore received packet due to error" in line:
+            self.errors_count+=1
+            return
 
         # Извлекаем временную метку
         time_match = re.search(r'(\d{2}:\d{2}:\d{2}\s+\d+)\s+\[', line)
@@ -624,6 +629,7 @@ class LogParser:
             'unique_nodes': len(self.nodes),
             'busy_rx_count': self.busy_rx_count,
             'rx_count': self.rx_count,
+            'errors_count': self.errors_count,
             'avg_retransmission_delay': avg_delay,
             'uptime_seconds': time.time() - self.start_time
         }
@@ -782,6 +788,7 @@ class LogAnalyzerGUI:
             ('packets', '📦 Пакеты: 0'),
             ('rx_count', '📦 Принято: 0'),
             ('retrans', '🔄 Ретранс: 0'),
+            ('errors', '  Ошибок: 0'),
             ('nodes', '📡 Узлы: 0'),
             ('busy', '⚠️ BusyRx: 0'),
             ('delay', '⏱️ Задержка: 0.0с')
@@ -1186,6 +1193,7 @@ class LogAnalyzerGUI:
         # Обновляем метки в статус баре
         self.stats_labels['packets'].config(text=f"📦 Пакеты: {stats['total_packets']}")
         self.stats_labels['rx_count'].config(text=f"📦 Принято: {stats['rx_count']}")
+        self.stats_labels['errors'].config(text=f" Ошибок: {stats['errors_count']}")
         self.stats_labels['retrans'].config(text=f"🔄 Ретранс: {stats['retransmitted_packets']}")
         self.stats_labels['nodes'].config(text=f"📡 Узлы: {stats['unique_nodes']}")
         self.stats_labels['busy'].config(text=f"⚠️ BusyRx: {stats['busy_rx_count']}")
