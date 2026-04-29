@@ -1393,7 +1393,10 @@ class LogAnalyzerGUI:
 
     def clear_data(self):
         """Очищает все данные"""
-        #self.parser = LogParser()
+        save_ts = self.parser.time_correction
+        self.parser = LogParser()
+        self.parser.time_correction = save_ts
+        
         self.update_statistics()
         self.details_text.delete(1.0, tk.END)
         messagebox.showinfo("Очистка", "Данные очищены")
