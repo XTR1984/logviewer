@@ -11,6 +11,7 @@ import time
 from datetime import datetime, timezone
 from collections import defaultdict
 from meshtastic.serial_interface import SerialInterface
+from meshtastic.tcp_interface import TCPInterface
 
 
 def convert_with_local_offset(timestamp):
@@ -721,6 +722,80 @@ class LogAnalyzerGUI:
             print(f"Загружено узлов: {str(len(self.nodeinfo))}")
             iface.close()
 
+    def update_nodeinfo_via_tcp(self, ip_address, port=4403):
+        """Получает nodeinfo через TCP интерфейс Meshtastic"""
+        try:
+            # Подключаемся через TCP интерфейс
+            iface = TCPInterface(hostname=ip_address, portNumber=port, timeout=3)
+
+            # Получаем информацию об узлах
+            if iface.nodes:
+                self.nodeinfo = iface.nodes.copy()
+                with open('nodeinfo.json', 'w', encoding='utf-8') as f:
+                    json.dump(self.nodeinfo, f, ensure_ascii=False, indent=2)
+
+                print(f"Загружено узлов через TCP: {len(self.nodeinfo)}")
+                iface.close()
+                return True
+            else:
+                print("Не удалось получить информацию об узлах")
+                iface.close()
+                return False
+
+        except Exception as e:
+            print(f"Ошибка подключения к {ip_address}:{port} - {e}")
+            return False
+
+    def show_tcp_connection_dialog(self):
+        """Показывает диалог для ввода IP адреса ноды"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("TCP подключение для nodeinfo")
+        dialog.geometry("350x250")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        ttk.Label(dialog, text="Введите IP адрес ноды Meshtastic:", 
+                 font=('TkDefaultFont', 10, 'bold')).pack(pady=10)
+
+        ip_var = tk.StringVar()
+        ip_entry = ttk.Entry(dialog, textvariable=ip_var, width=30)
+        ip_entry.pack(pady=5)
+        ip_entry.insert(0, "192.168.1.100")  # Пример IP
+
+        port_var = tk.StringVar(value="4403")
+        ttk.Label(dialog, text="Порт (по умолчанию 4403):").pack(pady=5)
+        port_entry = ttk.Entry(dialog, textvariable=port_var, width=30)
+        port_entry.pack(pady=5)
+
+        def on_connect():
+            ip = ip_var.get().strip()
+            if not ip:
+                messagebox.showerror("Ошибка", "Введите IP адрес")
+                return
+
+            try:
+                port = int(port_var.get())
+                if self.update_nodeinfo_via_tcp(ip, port):
+                    messagebox.showinfo("Успех", f"Nodeinfo загружен с {ip}:{port}")
+                    dialog.destroy()
+                    self.update_packets_table()
+                else:
+                    messagebox.showerror("Ошибка", f"Не удалось загрузить nodeinfo с {ip}:{port}")
+            except ValueError:
+                messagebox.showerror("Ошибка", "Неверный номер порта")
+
+        def on_cancel():
+            dialog.destroy()
+
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(pady=10)
+
+        ttk.Button(btn_frame, text="Подключиться", command=on_connect).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Отмена", command=on_cancel).pack(side=tk.LEFT, padx=5)
+
+        ip_entry.bind('<Return>', lambda e: on_connect())
+        ip_entry.focus()
+
     def show_connection_dialog(self):
         """Показывает диалог выбора источника данных"""
         dialog = ConnectionDialog(self.root)
@@ -914,6 +989,8 @@ class LogAnalyzerGUI:
         tools_menu.add_command(label="Обновить статистику", 
                              command=self.update_statistics, 
                              accelerator="F5")
+        tools_menu.add_command(label="Загрузить nodeinfo по TCP", 
+                      command=self.show_tcp_connection_dialog)
 
         tools_menu.add_command(label="Перезагрузить relayinfo", 
                              command=self.update_relayinfo)
