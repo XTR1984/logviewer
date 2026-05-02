@@ -683,6 +683,7 @@ class LogAnalyzerGUI:
         self.writelog = tk.BooleanVar(value=True)
         self.display_mode = tk.StringVar(value="combine") 
         self.current_packet_details_id = None
+        self.udp_receiver = None
 
         nodesfile = 'nodeinfo.json'
         if os.path.exists(nodesfile):
@@ -800,7 +801,11 @@ class LogAnalyzerGUI:
         """Показывает диалог выбора источника данных"""
         dialog = ConnectionDialog(self.root)
         result = dialog.show()
-        
+        if self.udp_receiver:
+            try:
+                self.udp_receiver.stop()
+            except:
+                pass
         if not result:
             self.connection_established = False
             return False
